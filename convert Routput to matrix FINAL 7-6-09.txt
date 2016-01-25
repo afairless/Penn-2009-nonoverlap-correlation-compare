@@ -1,0 +1,122 @@
+Sub ConvertROutputToMatrix()
+' Andrew Fairless, July 2009
+
+' This program converts the output of a script written for the statistical program R into the form of a correlation matrix.
+' This conversion allows the Excel macro written to compare to correlated correlations (according to Steiger 1980) to receive
+' the correlations calculated by the R script as input (i.e., the correlations must be in matrix form).
+
+Dim InputColumnRange As Range, MatrixRange As Range
+Dim InputColumn As Variant, AllVariableNames As Variant, UniqueVariableNames As Variant, Matrix As Variant
+Dim RowCount As Integer, ColCount As Integer
+Dim Index As Integer, Index2 As Integer
+Dim VariableNumber As Integer
+Dim Variable1 As Integer, Variable2 As Integer
+
+Const Column As Integer = 1
+
+' This program assumes the data arranged in a column.
+' This program assumes that a cell of the input column is highlighted.
+' This program assumes that the first cell of the input column is the name of one of the correlated variables.  The second cell
+' is the name of the other correlated variable.  The third cell is the correlation, possibly preceded by the R notation "[1]"
+' (to denote that it is the first (and only) element listed).  The remainder of the column repeats the same 3-cell pattern.
+
+' Inputs correlation matrix.
+    Selection.CurrentRegion.Select
+    Set InputColumnRange = Selection.CurrentRegion
+    RowCount = InputColumnRange.Rows.Count
+ReDim InputColumn(1 To RowCount)
+' Removes all instances of "[1] ", if any are present.
+    Selection.Replace What:="[1] ", Replacement:="", LookAt:=xlPart, _
+        SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, ReplaceFormat:=False
+    InputColumn = Selection.Value
+    Selection.Range("A1").Select
+
+' Calculates number of variables in the data set based on the number of rows in the input column.
+    VariableNumber = 2
+    Do Until (VariableNumber * (VariableNumber - 1)) >= (RowCount * 2 / 3)
+        VariableNumber = VariableNumber + 1
+    Loop
+    
+' Creates a new data column that includes only the variable names and excludes the correlation coefficients.
+ReDim AllVariableNames(1 To RowCount)
+    Index2 = 1
+    For Index = 1 To RowCount
+        If (Index Mod 3) > 0 Then
+            AllVariableNames(Index2) = InputColumn(Index, Column)
+            Index2 = Index2 + 1
+        End If
+    Next
+    
+' Calls a function that removes repetitions of the variable names, so that only the unique variable names are stored.
+ReDim UniqueVariableNames(1 To VariableNumber)
+    UniqueVariableNames = UniqueItems(AllVariableNames, False)
+    
+' Creates the correlation matrix.
+ReDim Matrix(0 To VariableNumber, 0 To VariableNumber)
+' Assigns the unique variable names to the first row and column of the correlation matrix.
+    For Index = 1 To VariableNumber
+        Matrix(Index, 0) = UniqueVariableNames(Index)
+        Matrix(0, Index) = UniqueVariableNames(Index)
+    Next
+' Locates correct row and column for each variable.
+    For Index = 1 To RowCount Step 3
+        For Index2 = 1 To VariableNumber
+            If Matrix(Index2, 0) = InputColumn(Index, Column) Then
+                Variable1 = Index2
+            End If
+            If Matrix(Index2, 0) = InputColumn(Index + 1, Column) Then
+                Variable2 = Index2
+            End If
+        Next
+' Assigns each correlation coefficient to correct row and column.  Each coefficient appears twice in the matrix.
+        Matrix(Variable1, Variable2) = InputColumn(Index + 2, Column)
+        Matrix(Variable2, Variable1) = InputColumn(Index + 2, Column)
+    Next
+    
+' Sets each cell of the matrix diagonal equal to 1.
+    For Index = 1 To VariableNumber
+        Matrix(Index, Index) = 1
+    Next
+    
+' Prints correlation matrix to the right of the original input column.
+    ActiveCell.Offset(0, 2).Select
+    Set MatrixRange = Range(ActiveCell, ActiveCell.Offset(VariableNumber, VariableNumber))
+    MatrixRange.Value = Matrix
+
+End Sub
+
+
+
+Function UniqueItems(ArrayIn, Optional Count As Variant) As Variant
+'   Accepts an array or range as input
+'   If Count = True or is missing, the function returns the number of unique elements
+'   If Count = False, the function returns a variant array of unique elements
+    Dim Unique() As Variant ' array that holds the unique items
+    Dim Element As Variant
+    Dim i As Integer
+    Dim FoundMatch As Boolean
+'   If 2nd argument is missing, assign default value
+    If IsMissing(Count) Then Count = True
+'   Counter for number of unique elements
+    NumUnique = 0
+'   Loop thru the input array
+    For Each Element In ArrayIn
+        FoundMatch = False
+'       Has item been added yet?
+        For i = 1 To NumUnique
+            If Element = Unique(i) Then
+                FoundMatch = True
+                Exit For '(exit loop)
+            End If
+        Next i
+AddItem:
+'       If not in list, add the item to unique list
+        If Not FoundMatch And Not IsEmpty(Element) Then
+            NumUnique = NumUnique + 1
+            ReDim Preserve Unique(NumUnique)
+            Unique(NumUnique) = Element
+        End If
+    Next Element
+'   Assign a value to the function
+    If Count Then UniqueItems = NumUnique Else UniqueItems = Unique
+End Function
